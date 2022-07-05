@@ -1,6 +1,6 @@
 # Addingwell Monitoring Tag
 
-[./assets/addingwell.svg]
+![Addingwell Logo](/assets/addingwell.svg)
 https://addingwell.com
 
 This tags saves anonymized data to BigQuery, to power the Addingwell Monitoring feature.
@@ -17,12 +17,12 @@ Register here for a free trial : https://app.addingwell.com/signup
 
 ### Tag Monitoring
 
-[./assets/tagmonitoring.png]
+![Tag Monitoring Interface](/assets/tagmonitoring.png)
 
 
 ### Data Monitoring
 
-[./assets/datamonitoring_page1.png]
+![Data Monitoring interface - first page](./assets/datamonitoring_page1.png)
 
 
-[./assets/datamonitoring_page2.png]
+![Data Monitoring interface - second page](./assets/datamonitoring_page2.png)
