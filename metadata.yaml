@@ -3,3 +3,5 @@ documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/mas
 versions:
   - sha: 07733aaa0cbbb90cf7fb653d3dee00adb1b5f928
     changeNotes: Initial release.
+  - sha: e3f1bd1614719bc00d130a2df928b5285112fd6d
+    changeNotes: Fix bug when ClientID / UserAgent is not defined.
