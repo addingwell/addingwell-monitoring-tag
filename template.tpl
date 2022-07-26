@@ -13,7 +13,9 @@ ___INFO___
   "id": "cvt_temp_public_id",
   "version": 1,
   "securityGroups": [],
-  "categories": ["UTILITY"],
+  "categories": [
+    "UTILITY"
+  ],
   "displayName": "Addingwell Monitoring",
   "brand": {
     "id": "brand_dummy",
@@ -104,13 +106,16 @@ addEventCallback((containerId, eventData) => {
     'user_data.address.postal_code',
     'user_data.address.country'
   ];
+  
+  const clientId = getEventData('client_id');
+  const userAgent = getEventData('user_agent');
 
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
     event_name: getEventData('event_name'),
-    client_id_hashed: sha256Sync(getEventData('client_id'), { outputEncoding: 'base64' }),
-    user_agent: getEventData('user_agent'),
-    user_agent_hashed: sha256Sync(getEventData('user_agent'), { outputEncoding: 'base64' }),
+    client_id_hashed: clientId ? sha256Sync(clientId, { outputEncoding: 'base64' }) : null,
+    user_agent: userAgent,
+    user_agent_hashed: userAgent ? sha256Sync(userAgent, { outputEncoding: 'base64' }) : null,
     page_hostname: getEventData('page_hostname'),
     consent_settings: googleConsent,
     container_version: containerVersion.version,
