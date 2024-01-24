@@ -91,6 +91,7 @@ const parseUrl = require('parseUrl');
 addEventCallback((containerId, eventData) => {
   const googleConsent = getRequestQueryParameter('gcs');
   const containerVersion = getContainerVersion();
+  const hasRichSstSse = getType(getRequestQueryParameter('richsstsse')) !== 'undefined';
   
   const commonKeys = [
     'user_agent',
@@ -119,6 +120,7 @@ addEventCallback((containerId, eventData) => {
     page_hostname: getEventData('page_hostname'),
     consent_settings: googleConsent,
     container_version: containerVersion.version,
+    has_richsstsse: hasRichSstSse,
     tag: eventData.tags.filter(tag => tag.exclude !== 'true').map(tag => ({
       id: tag.id,
       status: tag.status,
