@@ -97,6 +97,7 @@ addEventCallback((containerId, eventData) => {
     'user_agent',
     'client_id',
     'user_id',
+    'user_data.email',
     'user_data.email_address',
     'user_data.sha256_email_address',
     'user_data.phone_number',
