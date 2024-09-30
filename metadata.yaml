@@ -1,6 +1,8 @@
 homepage: "https://www.addingwell.com"
 documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/master/README.md"
 versions:
+  - sha: ddfaf51987f51de3e8de752171b41cbed7d287ea
+    changeNotes: Update to new logo
   - sha: dcd4d802ac3fc7e4d1133a5ccd8816a904887750
     changeNotes: Add monitoring on user_data.email
   - sha: 216ac210cf473b31994ebf30ad019efd1befc7c4
