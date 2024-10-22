@@ -28,3 +28,11 @@ This allows you to control :
 ## Implementation
 
 You can follow our [step-by-step instructions](https://docs.addingwell.com/configure-tag-health-gtm-server-side).
+
+## Reporting Bugs/Feedback
+
+Please raise any issues on GitHub or contact us directly at support@addingwell.com.
+
+## Open Source
+
+The Addingwell Monitoring Tag for GTM Server-Side is developed and maintained by [Addingwell](https://www.addingwell.com/) under the Apache 2.0 license.### Open Source
