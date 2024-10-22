@@ -1,6 +1,8 @@
 homepage: "https://www.addingwell.com"
 documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/master/README.md"
 versions:
+  - sha: 74c2d33374209fbf7b4c92f7e8e3dd5f791d7a7c
+    changeNotes: Update readme
   - sha: ddfaf51987f51de3e8de752171b41cbed7d287ea
     changeNotes: Update to new logo
   - sha: dcd4d802ac3fc7e4d1133a5ccd8816a904887750
