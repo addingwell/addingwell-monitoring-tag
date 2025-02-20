@@ -74,10 +74,12 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_SERVER___
 
+const Object = require('Object');
 const addEventCallback = require('addEventCallback');
 const getContainerVersion = require('getContainerVersion');
 const BigQuery = require('BigQuery');
 const getEventData = require('getEventData');
+const getAllEventData = require('getAllEventData');
 const getTimestampMillis = require('getTimestampMillis');
 const sha256Sync = require('sha256Sync');
 const makeNumber = require('makeNumber');
@@ -88,31 +90,88 @@ const getClientName = require('getClientName');
 const computeEffectiveTldPlusOne = require('computeEffectiveTldPlusOne');
 const parseUrl = require('parseUrl');
 
+const allEventData = getAllEventData();
+
+const eventDataParsed = [];
+
+const ignoredParameters = ['client_hints', 'x-sst-system_properties'];
+
+function getSpecialValue(type, value) {
+  let isSpecialValue = null;
+  if (type === 'array' || type === 'object' || type === 'function') {
+    isSpecialValue = type;
+  } else if (type === 'string') {
+    const lcValue = value.toLowerCase();
+
+    if (lcValue === 'undefined' || lcValue === 'null') {
+      isSpecialValue = lcValue;
+    } else if (lcValue === '') {
+      isSpecialValue = 'empty_string';
+    } else if (lcValue === 'eb045d78d273107348b0300c01d29b7552d622abbc6faf81b3ec55359aa9950c') {
+      isSpecialValue = 'undefined';
+    } else if (lcValue === '74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b') {
+      isSpecialValue = 'null';
+    } else if (lcValue === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') {
+      isSpecialValue = 'empty_string';
+    }
+  }
+
+  return isSpecialValue;
+}
+
+function recursiveParseEventData(eventData, prefix) {
+  const type = getType(eventData);
+
+  switch (type) {
+    case 'null':
+    case 'undefined':
+      return;
+    case 'object': {
+      for (const row of Object.entries(eventData)) {
+        const key = row[0];
+        const value = row[1];
+
+        if (key.indexOf('x-ga-') === 0 || ignoredParameters.indexOf(key) !== -1) {
+          continue;
+        }
+
+        recursiveParseEventData(value, prefix ? (prefix + '.' + key) : key);
+      }
+      break;
+    }
+    case 'array': {
+      // Only check value for first 2 items
+      for (const value of eventData.slice(0, 2)) {
+        recursiveParseEventData(value, prefix + '[]');
+      }
+      
+      break;
+    }
+    default: {
+      let clusterValue = null;
+      if (type === 'string' || type === 'number' || type === 'boolean') {
+        clusterValue = sha256Sync((eventData + '').toLowerCase(), { outputEncoding: 'base64' }).slice(0, 1);
+      }
+      
+      eventDataParsed.push({
+        key: prefix,
+        type: type,
+        was_hashed: type === 'string' ? isSha256(eventData) : null,
+        cluster_value: clusterValue,
+        special_value: getSpecialValue(type, eventData),
+      });
+    }
+  }
+}
+
+recursiveParseEventData(allEventData);
+
+
 addEventCallback((containerId, eventData) => {
   const googleConsent = getRequestQueryParameter('gcs');
   const containerVersion = getContainerVersion();
   const hasRichSstSse = getType(getRequestQueryParameter('richsstsse')) !== 'undefined';
-  
-  const commonKeys = [
-    'user_agent',
-    'client_id',
-    'user_id',
-    'user_data.email',
-    'user_data.email_address',
-    'user_data.sha256_email_address',
-    'user_data.phone_number',
-    'user_data.sha256_phone_number',
-    'user_data.address.first_name',
-    'user_data.address.sha256_first_name',
-    'user_data.address.last_name',
-    'user_data.address.sha256_last_name',
-    'user_data.address.street',
-    'user_data.address.city',
-    'user_data.address.region',
-    'user_data.address.postal_code',
-    'user_data.address.country'
-  ];
-  
+
   const clientId = getEventData('client_id');
   const userAgent = getEventData('user_agent');
 
@@ -132,60 +191,12 @@ addEventCallback((containerId, eventData) => {
       execution_time: tag.executionTime
     })),
     gtm_client_name: getClientName(),
-    event_data: [],
+    event_data: eventDataParsed,
   };
 
   if (getEventData('page_location')) {
     const parsedUrl = parseUrl(getEventData('page_location'));
     row.page_location_hostname = parsedUrl ? parsedUrl.hostname : null;
-  }
-  
-  for (const key in commonKeys) {
-    if (!commonKeys.hasOwnProperty(key)) {
-      continue;
-    }
-    
-    const commonDataKey = commonKeys[key];
-    const value = getEventData(commonDataKey);
-    const type = getType(value);
-    
-    if (type === 'null' || type === 'undefined') {
-      continue;
-    }
-    
-    let isSpecialValue = null;
-    if (type === 'array' || type === 'object' || type === 'function') {
-      isSpecialValue = type;
-    } else if (type === 'string') {
-      const lcValue = value.toLowerCase();
-
-      if (lcValue === 'undefined' || lcValue === 'null') {
-        isSpecialValue = lcValue;
-      } else if (lcValue === '') { 
-        isSpecialValue = 'empty_string';
-      } else if (lcValue === 'eb045d78d273107348b0300c01d29b7552d622abbc6faf81b3ec55359aa9950c') {
-        isSpecialValue = 'undefined';
-      } else if (lcValue === '74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b') {
-        isSpecialValue = 'null';
-      } else if (lcValue === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') {
-        isSpecialValue = 'empty_string';
-      }
-    }
-    
-    let clusterValue = null;
-    if (type === 'string' || type === 'number' || type === 'boolean') {
-      clusterValue = sha256Sync((value + '').toLowerCase(), { outputEncoding: 'base64' }).slice(0, 1);
-    }
-
-    const eventData = {
-      key: commonDataKey,
-      type: type,
-      cluster_value: clusterValue,
-      was_hashed: type === 'string' ? isSha256(value) : null,
-      special_value: isSpecialValue,
-    };
-    
-    row.event_data.push(eventData);
   }
 
   const connectionInfo = {
