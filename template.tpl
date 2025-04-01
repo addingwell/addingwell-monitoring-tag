@@ -82,12 +82,10 @@ const getEventData = require('getEventData');
 const getAllEventData = require('getAllEventData');
 const getTimestampMillis = require('getTimestampMillis');
 const sha256Sync = require('sha256Sync');
-const makeNumber = require('makeNumber');
 const getRequestQueryParameter = require('getRequestQueryParameter');
 const log = require('logToConsole');
 const getType = require('getType');
 const getClientName = require('getClientName');
-const computeEffectiveTldPlusOne = require('computeEffectiveTldPlusOne');
 const parseUrl = require('parseUrl');
 
 const allEventData = getAllEventData();
@@ -119,7 +117,7 @@ function getSpecialValue(type, value) {
   return isSpecialValue;
 }
 
-function recursiveParseEventData(eventData, prefix) {
+function recursiveParseEventData(eventData, prefix, inverseWeighting) {
   const type = getType(eventData);
 
   switch (type) {
@@ -135,14 +133,15 @@ function recursiveParseEventData(eventData, prefix) {
           continue;
         }
 
-        recursiveParseEventData(value, prefix ? (prefix + '.' + key) : key);
+        recursiveParseEventData(value, prefix ? (prefix + '.' + key) : key, inverseWeighting);
       }
       break;
     }
     case 'array': {
       // Only check value for first 2 items
-      for (const value of eventData.slice(0, 2)) {
-        recursiveParseEventData(value, prefix + '[]');
+      const slicedData = eventData.slice(0, 2);
+      for (const value of slicedData) {
+        recursiveParseEventData(value, prefix + '[]', (inverseWeighting ? inverseWeighting : 1) * slicedData.length);
       }
       
       break;
@@ -159,6 +158,7 @@ function recursiveParseEventData(eventData, prefix) {
         was_hashed: type === 'string' ? isSha256(eventData) : null,
         cluster_value: clusterValue,
         special_value: getSpecialValue(type, eventData),
+        inverse_weighting: inverseWeighting,
       });
     }
   }
