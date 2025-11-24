@@ -33,6 +33,22 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
+    "type": "RADIO",
+    "name": "configuration",
+    "displayName": "Configuration to use either BigQuery or Internal Transformer",
+    "radioItems": [
+      {
+        "value": "big_query",
+        "displayValue": "BigQuery"
+      },
+      {
+        "value": "internal_transformer",
+        "displayValue": "Internal Transformer"
+      }
+    ],
+    "simpleValueType": true
+  },
+  {
     "type": "TEXT",
     "name": "bq_project_id",
     "displayName": "BigQuery Project ID",
@@ -68,6 +84,32 @@ ___TEMPLATE_PARAMETERS___
         "errorMessage": "The table id is required."
       }
     ]
+  },
+  {
+    "type": "TEXT",
+    "name": "internal_transformer_url",
+    "displayName": "Internal Transformer URL",
+    "simpleValueType": true,
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "internal_transformer",
+        "type": "EQUALS"
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "cookies",
+    "displayName": "Cookies",
+    "simpleValueType": true,
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "internal_transformer",
+        "type": "EQUALS"
+      }
+    ]
   }
 ]
 
@@ -87,6 +129,9 @@ const log = require('logToConsole');
 const getType = require('getType');
 const getClientName = require('getClientName');
 const parseUrl = require('parseUrl');
+const getCookieValues = require('getCookieValues');
+const sendHttpRequest = require('sendHttpRequest');
+const JSON = require('JSON');
 
 const allEventData = getAllEventData();
 
@@ -175,6 +220,21 @@ addEventCallback((containerId, eventData) => {
   const clientId = getEventData('client_id');
   const userAgent = getEventData('user_agent');
 
+  // read data from template fields
+  const internalTransformerUrl = data.internal_transformer_url;
+  const configuration = data.configuration;
+  const cookieNames = data.cookies.split(',');
+  const bigQueryConfig = {
+    projectId: data.bq_project_id,
+    datasetId: data.bq_dataset_id,
+    tableId: data.bq_table_id,
+  };
+  
+  const cookies = {};
+  for (const cookieName of cookieNames) {
+    cookies[cookieName] = getCookieValues(cookieName)[0];
+  }
+  
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
     event_name: getEventData('event_name'),
@@ -192,6 +252,8 @@ addEventCallback((containerId, eventData) => {
     })),
     gtm_client_name: getClientName(),
     event_data: eventDataParsed,
+    bigQueryConfig: bigQueryConfig,
+    cookies: cookies
   };
 
   if (getEventData('page_location')) {
@@ -199,20 +261,36 @@ addEventCallback((containerId, eventData) => {
     row.page_location_hostname = parsedUrl ? parsedUrl.hostname : null;
   }
 
-  const connectionInfo = {
-    projectId: data.bq_project_id,
-    datasetId: data.bq_dataset_id,
-    tableId: data.bq_table_id,
-  };
+  // insert to big query
+  if(configuration === 'big_query') {
+    BigQuery.insert(bigQueryConfig, [row], {}, () => {
+      log('BigQuery Success');
+    }, (errors) => {
+      log('BigQuery Failure');
+    });  
+    
+    data.gtmOnSuccess();
+  }
+  
+  // call internal transformer
+  else if(configuration === 'internal_transformer') {
+    sendHttpRequest(internalTransformerUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'GTM-Comprehensive-Capture/1.0',
+    },
+    timeout: 10000
+  }, JSON.stringify(row), (statusCode, headers, body) => {
 
-  BigQuery.insert(connectionInfo, [row], {}, () => {
-    log('BigQuery Success');
-  }, (errors) => {
-    log('BigQuery Failure');
+    if (statusCode === 200) {
+      data.gtmOnSuccess();
+    } else {
+      data.gtmOnFailure();
+    }
   });
+  }
 });
-
-data.gtmOnSuccess();
 
 function isSha256(value) {
   return !!value.match('[a-fA-F0-9]{64}');
@@ -231,6 +309,64 @@ ___SERVER_PERMISSIONS___
       "param": [
         {
           "key": "eventDataAccess",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "cookieAccess",
+          "value": {
+            "type": 1,
+            "string": "specific"
+          }
+        },
+        {
+          "key": "cookieNames",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 1,
+                "string": "didomi_token"
+              },
+              {
+                "type": 1,
+                "string": "euconsent-v2"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "send_http",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "allowedUrls",
           "value": {
             "type": 1,
             "string": "any"
