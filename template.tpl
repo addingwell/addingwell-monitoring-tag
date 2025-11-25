@@ -252,7 +252,7 @@ addEventCallback((containerId, eventData) => {
     gtm_client_name: getClientName(),
     event_data: eventDataParsed,
     bigQueryConfig: bigQueryConfig,
-    cookies: cookies,
+    cookies: cookies
   };
 
   if (getEventData('page_location')) {
@@ -271,10 +271,8 @@ addEventCallback((containerId, eventData) => {
       },
       (errors) => {
         log('BigQuery Failure');
-      },
+      }
     );
-
-    data.gtmOnSuccess();
   }
 
   // call internal transformer
