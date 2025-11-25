@@ -188,7 +188,7 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
       for (const value of slicedData) {
         recursiveParseEventData(value, prefix + '[]', (inverseWeighting ? inverseWeighting : 1) * slicedData.length);
       }
-      
+
       break;
     }
     default: {
@@ -196,7 +196,7 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
       if (type === 'string' || type === 'number' || type === 'boolean') {
         clusterValue = sha256Sync((eventData + '').toLowerCase(), { outputEncoding: 'base64' }).slice(0, 1);
       }
-      
+
       eventDataParsed.push({
         key: prefix,
         type: type,
@@ -210,7 +210,6 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
 }
 
 recursiveParseEventData(allEventData);
-
 
 addEventCallback((containerId, eventData) => {
   const googleConsent = getRequestQueryParameter('gcs');
@@ -229,12 +228,12 @@ addEventCallback((containerId, eventData) => {
     datasetId: data.bq_dataset_id,
     tableId: data.bq_table_id,
   };
-  
+
   const cookies = {};
   for (const cookieName of cookieNames) {
     cookies[cookieName] = getCookieValues(cookieName)[0];
   }
-  
+
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
     event_name: getEventData('event_name'),
@@ -253,7 +252,7 @@ addEventCallback((containerId, eventData) => {
     gtm_client_name: getClientName(),
     event_data: eventDataParsed,
     bigQueryConfig: bigQueryConfig,
-    cookies: cookies
+    cookies: cookies,
   };
 
   if (getEventData('page_location')) {
@@ -262,35 +261,40 @@ addEventCallback((containerId, eventData) => {
   }
 
   // insert to big query
-  if(configuration === 'big_query') {
-    BigQuery.insert(bigQueryConfig, [row], {}, () => {
-      log('BigQuery Success');
-    }, (errors) => {
-      log('BigQuery Failure');
-    });  
-    
+  if (configuration === 'big_query') {
+    BigQuery.insert(
+      bigQueryConfig,
+      [row],
+      {},
+      () => {
+        log('BigQuery Success');
+      },
+      (errors) => {
+        log('BigQuery Failure');
+      },
+    );
+
     data.gtmOnSuccess();
   }
-  
-  // call internal transformer
-  else if(configuration === 'internal_transformer') {
-    sendHttpRequest(internalTransformerUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'GTM-Comprehensive-Capture/1.0',
-    },
-    timeout: 10000
-  }, JSON.stringify(row), (statusCode, headers, body) => {
 
-    if (statusCode === 200) {
-      data.gtmOnSuccess();
-    } else {
-      data.gtmOnFailure();
-    }
-  });
+  // call internal transformer
+  else if (configuration === 'internal_transformer') {
+    sendHttpRequest(
+      internalTransformerUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'GTM-Comprehensive-Capture/1.0',
+        },
+        timeout: 10000,
+      },
+      JSON.stringify(row)
+    );
   }
 });
+
+data.gtmOnSuccess();
 
 function isSha256(value) {
   return !!value.match('[a-fA-F0-9]{64}');
