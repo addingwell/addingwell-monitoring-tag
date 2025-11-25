@@ -334,23 +334,7 @@ ___SERVER_PERMISSIONS___
           "key": "cookieAccess",
           "value": {
             "type": 1,
-            "string": "specific"
-          }
-        },
-        {
-          "key": "cookieNames",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "didomi_token"
-              },
-              {
-                "type": 1,
-                "string": "euconsent-v2"
-              }
-            ]
+            "string": "any"
           }
         }
       ]
