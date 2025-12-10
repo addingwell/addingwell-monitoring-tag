@@ -240,15 +240,8 @@ addEventCallback((containerId, eventData) => {
   const clientId = getEventData('client_id');
   const userAgent = getEventData('user_agent');
 
-  // read data from template fields
-  const internalTransformerUrl = data.internal_transformer_url;
+  // configuration (either 'big_query' or 'internal_transformer')
   const configuration = data.configuration;
-  const cookieNames = data.cookies.split(',');
-
-  const cookies = {};
-  for (const cookieName of cookieNames) {
-    cookies[cookieName] = getCookieValues(cookieName)[0];
-  }
 
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
@@ -266,8 +259,7 @@ addEventCallback((containerId, eventData) => {
       execution_time: tag.executionTime
     })),
     gtm_client_name: getClientName(),
-    event_data: eventDataParsed,
-    cookies: cookies
+    event_data: eventDataParsed
   };
 
   if (getEventData('page_location')) {
@@ -275,7 +267,7 @@ addEventCallback((containerId, eventData) => {
     row.page_location_hostname = parsedUrl ? parsedUrl.hostname : null;
   }
 
-  // insert to big query
+  // big query
   if (configuration === 'big_query') {
 
     const bigQueryConfig = {
@@ -297,8 +289,20 @@ addEventCallback((containerId, eventData) => {
     );
   }
 
-  // call internal transformer
+  // internal transformer
   else if (configuration === 'internal_transformer') {
+
+    const internalTransformerUrl = data.internal_transformer_url;
+    const cookieNames = data.cookies.split(',');
+
+    const cookies = {};
+    for (const cookieName of cookieNames) {
+      cookies[cookieName] = getCookieValues(cookieName)[0];
+    }
+
+    // include cookies in internal transformer call
+    row.cookies = cookies;
+    
     sendHttpRequest(
       internalTransformerUrl,
       {
