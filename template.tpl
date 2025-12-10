@@ -59,6 +59,13 @@ ___TEMPLATE_PARAMETERS___
         "errorMessage": "The project id is required."
       }
     ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
+      }
+    ],
     "help": "Your server must have access to this project"
   },
   {
@@ -71,6 +78,13 @@ ___TEMPLATE_PARAMETERS___
         "type": "NON_EMPTY",
         "errorMessage": "The dataset id is required."
       }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
+      }
     ]
   },
   {
@@ -82,6 +96,13 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "NON_EMPTY",
         "errorMessage": "The table id is required."
+      }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
       }
     ]
   },
@@ -223,11 +244,6 @@ addEventCallback((containerId, eventData) => {
   const internalTransformerUrl = data.internal_transformer_url;
   const configuration = data.configuration;
   const cookieNames = data.cookies.split(',');
-  const bigQueryConfig = {
-    projectId: data.bq_project_id,
-    datasetId: data.bq_dataset_id,
-    tableId: data.bq_table_id,
-  };
 
   const cookies = {};
   for (const cookieName of cookieNames) {
@@ -251,7 +267,6 @@ addEventCallback((containerId, eventData) => {
     })),
     gtm_client_name: getClientName(),
     event_data: eventDataParsed,
-    bigQueryConfig: bigQueryConfig,
     cookies: cookies
   };
 
@@ -262,6 +277,13 @@ addEventCallback((containerId, eventData) => {
 
   // insert to big query
   if (configuration === 'big_query') {
+
+    const bigQueryConfig = {
+      projectId: data.bq_project_id,
+      datasetId: data.bq_dataset_id,
+      tableId: data.bq_table_id,
+    };
+
     BigQuery.insert(
       bigQueryConfig,
       [row],
