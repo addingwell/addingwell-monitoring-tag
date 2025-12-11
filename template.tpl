@@ -46,7 +46,8 @@ ___TEMPLATE_PARAMETERS___
         "displayValue": "Internal Transformer"
       }
     ],
-    "simpleValueType": true
+    "simpleValueType": true,
+    "defaultValue": "internal_transformer"
   },
   {
     "type": "TEXT",
@@ -152,6 +153,7 @@ const getClientName = require('getClientName');
 const parseUrl = require('parseUrl');
 const getCookieValues = require('getCookieValues');
 const sendHttpRequest = require('sendHttpRequest');
+const getRequestHeader = require('getRequestHeader');
 const JSON = require('JSON');
 
 const allEventData = getAllEventData();
@@ -292,12 +294,15 @@ addEventCallback((containerId, eventData) => {
   // internal transformer
   else if (configuration === 'internal_transformer') {
 
-    const internalTransformerUrl = data.internal_transformer_url;
-    const cookieNames = data.cookies.split(',');
+    const internalTransformerUrl = data.internal_transformer_url || getRequestHeader('x-addingwell-internal-endpoint');
+    const cookieNames = (data.cookies || getRequestHeader('x-addingwell-cookie-names')).split(',');
 
     const cookies = {};
     for (const cookieName of cookieNames) {
-      cookies[cookieName] = getCookieValues(cookieName)[0];
+      const cookieValue = getCookieValues(cookieName);
+      if (cookieValue && cookieValue.length > 0) {
+        cookies[cookieName] = cookieValue[0];
+      }
     }
 
     // include cookies in internal transformer call
@@ -471,6 +476,13 @@ ___SERVER_PERMISSIONS___
       "param": [
         {
           "key": "queryParametersAllowed",
+          "value": {
+            "type": 8,
+            "boolean": true
+          }
+        },
+        {
+          "key": "headersAllowed",
           "value": {
             "type": 8,
             "boolean": true
