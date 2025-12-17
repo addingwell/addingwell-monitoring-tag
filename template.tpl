@@ -243,7 +243,7 @@ addEventCallback((containerId, eventData) => {
   const userAgent = getEventData('user_agent');
 
   // configuration (either 'big_query' or 'internal_transformer')
-  const configuration = data.configuration;
+  const configuration = data.configuration || 'internal_transformer';
 
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
