@@ -253,9 +253,6 @@ addEventCallback((containerId, eventData) => {
     user_agent_hashed: userAgent ? sha256Sync(userAgent, { outputEncoding: 'base64' }) : null,
     page_hostname: getEventData('page_hostname'),
     consent_settings: googleConsent,
-    google_consent_mode: {
-      gcs: googleConsent || null
-    },
     container_version: containerVersion.version,
     has_richsstsse: hasRichSstSse,
     tag: eventData.tags.filter(tag => tag.exclude !== 'true').map(tag => ({
