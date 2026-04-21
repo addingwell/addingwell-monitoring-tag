@@ -1,6 +1,8 @@
 homepage: "https://www.addingwell.com"
 documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/master/README.md"
 versions:
+  - sha: fb704ec18f451e6aeafc4536b6a3c63434617a4c
+    changeNotes: Add internal transformer mode for monitoring data forwarding
   - sha: 5fcddd794a73f51aae6293ec0e4908eac45691a3
     changeNotes: Improve monitoring by analysing more parameters
   - sha: 74c2d33374209fbf7b4c92f7e8e3dd5f791d7a7c
