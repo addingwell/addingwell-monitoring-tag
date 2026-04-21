@@ -33,6 +33,23 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
+    "type": "RADIO",
+    "name": "configuration",
+    "displayName": "Configuration to use either BigQuery or Internal Transformer",
+    "radioItems": [
+      {
+        "value": "big_query",
+        "displayValue": "BigQuery"
+      },
+      {
+        "value": "internal_transformer",
+        "displayValue": "Internal Transformer"
+      }
+    ],
+    "simpleValueType": true,
+    "defaultValue": "internal_transformer"
+  },
+  {
     "type": "TEXT",
     "name": "bq_project_id",
     "displayName": "BigQuery Project ID",
@@ -41,6 +58,13 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "NON_EMPTY",
         "errorMessage": "The project id is required."
+      }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
       }
     ],
     "help": "Your server must have access to this project"
@@ -55,6 +79,13 @@ ___TEMPLATE_PARAMETERS___
         "type": "NON_EMPTY",
         "errorMessage": "The dataset id is required."
       }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
+      }
     ]
   },
   {
@@ -66,6 +97,39 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "NON_EMPTY",
         "errorMessage": "The table id is required."
+      }
+    ],
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "big_query",
+        "type": "EQUALS"
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "internal_transformer_url",
+    "displayName": "Internal Transformer URL",
+    "simpleValueType": true,
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "internal_transformer",
+        "type": "EQUALS"
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "cookies",
+    "displayName": "Cookies",
+    "simpleValueType": true,
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "internal_transformer",
+        "type": "EQUALS"
       }
     ]
   }
@@ -87,6 +151,10 @@ const log = require('logToConsole');
 const getType = require('getType');
 const getClientName = require('getClientName');
 const parseUrl = require('parseUrl');
+const getCookieValues = require('getCookieValues');
+const sendHttpRequest = require('sendHttpRequest');
+const getRequestHeader = require('getRequestHeader');
+const JSON = require('JSON');
 
 const allEventData = getAllEventData();
 
@@ -143,7 +211,7 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
       for (const value of slicedData) {
         recursiveParseEventData(value, prefix + '[]', (inverseWeighting ? inverseWeighting : 1) * slicedData.length);
       }
-      
+
       break;
     }
     default: {
@@ -151,7 +219,7 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
       if (type === 'string' || type === 'number' || type === 'boolean') {
         clusterValue = sha256Sync((eventData + '').toLowerCase(), { outputEncoding: 'base64' }).slice(0, 1);
       }
-      
+
       eventDataParsed.push({
         key: prefix,
         type: type,
@@ -166,7 +234,6 @@ function recursiveParseEventData(eventData, prefix, inverseWeighting) {
 
 recursiveParseEventData(allEventData);
 
-
 addEventCallback((containerId, eventData) => {
   const googleConsent = getRequestQueryParameter('gcs');
   const containerVersion = getContainerVersion();
@@ -174,6 +241,9 @@ addEventCallback((containerId, eventData) => {
 
   const clientId = getEventData('client_id');
   const userAgent = getEventData('user_agent');
+
+  // configuration (either 'big_query' or 'internal_transformer')
+  const configuration = data.configuration || 'internal_transformer';
 
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
@@ -191,7 +261,7 @@ addEventCallback((containerId, eventData) => {
       execution_time: tag.executionTime
     })),
     gtm_client_name: getClientName(),
-    event_data: eventDataParsed,
+    event_data: eventDataParsed
   };
 
   if (getEventData('page_location')) {
@@ -199,17 +269,58 @@ addEventCallback((containerId, eventData) => {
     row.page_location_hostname = parsedUrl ? parsedUrl.hostname : null;
   }
 
-  const connectionInfo = {
-    projectId: data.bq_project_id,
-    datasetId: data.bq_dataset_id,
-    tableId: data.bq_table_id,
-  };
+  // big query
+  if (configuration === 'big_query') {
 
-  BigQuery.insert(connectionInfo, [row], {}, () => {
-    log('BigQuery Success');
-  }, (errors) => {
-    log('BigQuery Failure');
-  });
+    const bigQueryConfig = {
+      projectId: data.bq_project_id,
+      datasetId: data.bq_dataset_id,
+      tableId: data.bq_table_id,
+    };
+
+    BigQuery.insert(
+      bigQueryConfig,
+      [row],
+      {},
+      () => {
+        log('BigQuery Success');
+      },
+      (errors) => {
+        log('BigQuery Failure');
+      }
+    );
+  }
+
+  // internal transformer
+  else if (configuration === 'internal_transformer') {
+
+    const internalTransformerUrl = data.internal_transformer_url || getRequestHeader('x-addingwell-internal-endpoint');
+    const cookieNames = (data.cookies || getRequestHeader('x-addingwell-cookie-names')).split(',');
+
+    const cookies = {};
+    for (const cookieName of cookieNames) {
+      const cookieValue = getCookieValues(cookieName);
+      if (cookieValue && cookieValue.length > 0) {
+        cookies[cookieName] = cookieValue[0];
+      }
+    }
+
+    // include cookies in internal transformer call
+    row.cookies = cookies;
+    
+    sendHttpRequest(
+      internalTransformerUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'GTM-Comprehensive-Capture/1.0',
+        },
+        timeout: 10000,
+      },
+      JSON.stringify(row)
+    );
+  }
 });
 
 data.gtmOnSuccess();
@@ -231,6 +342,48 @@ ___SERVER_PERMISSIONS___
       "param": [
         {
           "key": "eventDataAccess",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "cookieAccess",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "send_http",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "allowedUrls",
           "value": {
             "type": 1,
             "string": "any"
@@ -323,6 +476,13 @@ ___SERVER_PERMISSIONS___
       "param": [
         {
           "key": "queryParametersAllowed",
+          "value": {
+            "type": 8,
+            "boolean": true
+          }
+        },
+        {
+          "key": "headersAllowed",
           "value": {
             "type": 8,
             "boolean": true
