@@ -269,7 +269,7 @@ addEventCallback((containerId, eventData) => {
     row.page_location_hostname = parsedUrl ? parsedUrl.hostname : null;
   }
 
-  // big query
+  // BigQuery
   if (configuration === 'big_query') {
 
     const bigQueryConfig = {
