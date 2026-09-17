@@ -242,12 +242,38 @@ addEventCallback((containerId, eventData) => {
   const clientId = getEventData('client_id');
   const userAgent = getEventData('user_agent');
 
+  const rawEventId = getEventData('event_id');
+  const rawEventIdType = getType(rawEventId);
+  /* Stringified rather than passed through, because GA4 emits the ID as a number
+     as often as a string and the column is STRING. Compared against the three
+     non-finite spellings instead of a Math guard: the sandbox has no isFinite,
+     and NaN or Infinity would otherwise be stored as an ID reading 'NaN'. */
+  let eventId = null;
+  if (rawEventIdType === 'string') {
+    eventId = rawEventId !== '' ? rawEventId : null;
+  } else if (rawEventIdType === 'number') {
+    const eventIdString = rawEventId + '';
+    if (eventIdString !== 'NaN' && eventIdString !== 'Infinity' && eventIdString !== '-Infinity') {
+      eventId = eventIdString;
+    }
+  }
+
+  /* Only numbers and strings are stringified, so a boolean or object detector
+     value stays null rather than being coerced into a verdict. Anything that is
+     not 1 or 0 is an unknown state, which is null, not false. */
+  const rawAwDa = getEventData('aw_da');
+  const rawAwDaType = getType(rawAwDa);
+  const awDa = rawAwDaType === 'string' || rawAwDaType === 'number' ? rawAwDa + '' : null;
+  const adblockerDetected = awDa === '1' ? true : awDa === '0' ? false : null;
+
   // configuration (either 'big_query' or 'internal_transformer')
   const configuration = data.configuration || 'internal_transformer';
 
   const row = {
     event_timestamp: getTimestampMillis() / 1000,
     event_name: getEventData('event_name'),
+    event_id: eventId,
+    adblocker_detected: adblockerDetected,
     client_id_hashed: clientId ? sha256Sync(clientId, { outputEncoding: 'base64' }) : null,
     user_agent: userAgent,
     user_agent_hashed: userAgent ? sha256Sync(userAgent, { outputEncoding: 'base64' }) : null,
@@ -281,7 +307,10 @@ addEventCallback((containerId, eventData) => {
     BigQuery.insert(
       bigQueryConfig,
       [row],
-      {},
+      /* A container can run this version against a gtm_monitoring table that
+         predates event_id and adblocker_detected. Without this the whole row is
+         rejected and that container loses all monitoring, not just two fields. */
+      { ignoreUnknownValues: true },
       () => {
         log('BigQuery Success');
       },
