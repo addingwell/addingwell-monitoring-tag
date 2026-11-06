@@ -1,6 +1,8 @@
 homepage: "https://www.addingwell.com"
 documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/master/README.md"
 versions:
+  - sha: 2b256a0f2d6ddbea12b571d55c16cf1be53f9e1b
+    changeNotes: SER-1503 — forward validated vendors_enabled from event data with ECM diagnostics
   - sha: a34ed0117988ba928685b2dc73635479f1089c6d
     changeNotes: Forward vendors_enabled from event data for ECM when no Didomi cookie
   - sha: 9aef7bbb2b63830399f9e91a822bde9579663090
