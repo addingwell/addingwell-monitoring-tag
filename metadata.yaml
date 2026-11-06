@@ -1,6 +1,8 @@
 homepage: "https://www.addingwell.com"
 documentation: "https://github.com/addingwell/addingwell-monitoring-tag/blob/master/README.md"
 versions:
+  - sha: a34ed0117988ba928685b2dc73635479f1089c6d
+    changeNotes: Forward vendors_enabled from event data for ECM when no Didomi cookie
   - sha: 9aef7bbb2b63830399f9e91a822bde9579663090
     changeNotes: Add new internal transformer mode for monitoring data forwarding
   - sha: fb704ec18f451e6aeafc4536b6a3c63434617a4c
