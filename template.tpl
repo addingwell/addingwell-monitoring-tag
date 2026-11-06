@@ -138,7 +138,7 @@ ___TEMPLATE_PARAMETERS___
     "name": "vendors_enabled_key",
     "displayName": "Vendors enabled event data key",
     "simpleValueType": true,
-    "help": "Optional. Custom event data key for the vendors-enabled list (raw string). Checked before the defaults: didomi_vendors_enabled, didomiVendorsEnabled, consent_vendors, consent_status.",
+    "help": "Optional. Custom event data key for the vendors-enabled list. Checked before the defaults: didomi_vendors_enabled, didomiVendorsEnabled, consent_vendors, consent_status. Value must be a comma-separated vendor id list (trailing comma/whitespace/%2C tolerated); malformed values are not forwarded.",
     "enablingConditions": [
       {
         "paramName": "configuration",
@@ -185,26 +185,74 @@ const DEFAULT_VENDORS_ENABLED_KEYS = [
   'consent_status',
 ];
 
-function resolveVendorsEnabled(customKey) {
-  const keys = [];
-  if (customKey) {
-    keys.push(customKey);
-  }
-  for (const key of DEFAULT_VENDORS_ENABLED_KEYS) {
-    keys.push(key);
+const VENDOR_ID_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_.:-]*$';
+
+function decodeVendorListSeparators(value) {
+  // Tolerate URL-encoded commas (%2C / %2c) alongside raw commas.
+  return value.split('%2C').join(',').split('%2c').join(',');
+}
+
+function isValidVendorsEnabledList(value) {
+  const parts = decodeVendorListSeparators(value).split(',');
+  let vendorCount = 0;
+
+  for (const part of parts) {
+    const vendorId = part.trim();
+    if (!vendorId) {
+      // Empty segments from leading/trailing/duplicate commas are tolerated.
+      continue;
+    }
+    if (!vendorId.match(VENDOR_ID_PATTERN)) {
+      return false;
+    }
+    vendorCount = vendorCount + 1;
   }
 
-  for (const key of keys) {
+  return vendorCount > 0;
+}
+
+function resolveVendorsEnabled(customKey) {
+  const result = {};
+  let configuredKeyMissing = false;
+
+  if (customKey) {
+    result.vendors_enabled_configured_key = customKey;
+
+    const customValue = getEventData(customKey);
+    if (getType(customValue) === 'string' && customValue) {
+      if (isValidVendorsEnabledList(customValue)) {
+        result.vendors_enabled = customValue;
+        result.vendors_enabled_source = customKey;
+        return result;
+      }
+      result.vendors_enabled_diagnostic = 'MALFORMED_LIST';
+      return result;
+    }
+
+    configuredKeyMissing = true;
+  }
+
+  for (const key of DEFAULT_VENDORS_ENABLED_KEYS) {
     const value = getEventData(key);
     if (getType(value) === 'string' && value) {
-      return {
-        vendors_enabled: value,
-        vendors_enabled_source: key,
-      };
+      if (isValidVendorsEnabledList(value)) {
+        result.vendors_enabled = value;
+        result.vendors_enabled_source = key;
+        if (configuredKeyMissing) {
+          result.vendors_enabled_diagnostic = 'CONFIGURED_KEY_NOT_FOUND';
+        }
+        return result;
+      }
+      result.vendors_enabled_diagnostic = 'MALFORMED_LIST';
+      return result;
     }
   }
 
-  return null;
+  if (configuredKeyMissing) {
+    result.vendors_enabled_diagnostic = 'CONFIGURED_KEY_NOT_FOUND';
+  }
+
+  return result;
 }
 
 function getSpecialValue(type, value) {
@@ -354,9 +402,15 @@ addEventCallback((containerId, eventData) => {
     row.cookies = cookies;
 
     const vendorsEnabled = resolveVendorsEnabled(data.vendors_enabled_key);
-    if (vendorsEnabled) {
+    if (vendorsEnabled.vendors_enabled) {
       row.vendors_enabled = vendorsEnabled.vendors_enabled;
       row.vendors_enabled_source = vendorsEnabled.vendors_enabled_source;
+    }
+    if (vendorsEnabled.vendors_enabled_diagnostic) {
+      row.vendors_enabled_diagnostic = vendorsEnabled.vendors_enabled_diagnostic;
+    }
+    if (vendorsEnabled.vendors_enabled_configured_key) {
+      row.vendors_enabled_configured_key = vendorsEnabled.vendors_enabled_configured_key;
     }
 
     sendHttpRequest(
@@ -615,6 +669,8 @@ scenarios:
 
     assertThat(capturedBody.vendors_enabled).isEqualTo('google,metaads,c:xyz,');
     assertThat(capturedBody.vendors_enabled_source).isEqualTo('didomi_vendors_enabled');
+    assertThat(capturedBody.vendors_enabled_diagnostic).isUndefined();
+    assertThat(capturedBody.vendors_enabled_configured_key).isUndefined();
     assertThat(capturedBody.event_data).isDefined();
 - name: Custom vendors_enabled_key takes precedence over defaults
   code: |-
@@ -629,6 +685,8 @@ scenarios:
 
     assertThat(capturedBody.vendors_enabled).isEqualTo('google,');
     assertThat(capturedBody.vendors_enabled_source).isEqualTo('custom_vendors');
+    assertThat(capturedBody.vendors_enabled_configured_key).isEqualTo('custom_vendors');
+    assertThat(capturedBody.vendors_enabled_diagnostic).isUndefined();
 - name: Omits vendors_enabled fields when nothing is found
   code: |-
     mockCommonApis();
@@ -639,7 +697,75 @@ scenarios:
 
     assertThat(capturedBody.vendors_enabled).isUndefined();
     assertThat(capturedBody.vendors_enabled_source).isUndefined();
+    assertThat(capturedBody.vendors_enabled_diagnostic).isUndefined();
+    assertThat(capturedBody.vendors_enabled_configured_key).isUndefined();
     assertThat(capturedBody.cookies).isDefined();
+- name: Accepts whitespace and encoded commas in a valid list
+  code: |-
+    eventDataOverrides.consent_vendors = ' google %2C metaads %2c c:xyz , ';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isEqualTo(' google %2C metaads %2c c:xyz , ');
+    assertThat(capturedBody.vendors_enabled_source).isEqualTo('consent_vendors');
+    assertThat(capturedBody.vendors_enabled_diagnostic).isUndefined();
+- name: Rejects a malformed vendors-enabled list
+  code: |-
+    eventDataOverrides.didomi_vendors_enabled = 'not a valid vendor list!!!';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isUndefined();
+    assertThat(capturedBody.vendors_enabled_source).isUndefined();
+    assertThat(capturedBody.vendors_enabled_diagnostic).isEqualTo('MALFORMED_LIST');
+- name: Configured key missing still forwards a valid default list
+  code: |-
+    eventDataOverrides.didomi_vendors_enabled = 'google,metaads,';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+      vendors_enabled_key: 'my_custom_key',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isEqualTo('google,metaads,');
+    assertThat(capturedBody.vendors_enabled_source).isEqualTo('didomi_vendors_enabled');
+    assertThat(capturedBody.vendors_enabled_diagnostic).isEqualTo('CONFIGURED_KEY_NOT_FOUND');
+    assertThat(capturedBody.vendors_enabled_configured_key).isEqualTo('my_custom_key');
+- name: Configured key missing with no fallback list
+  code: |-
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+      vendors_enabled_key: 'my_custom_key',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isUndefined();
+    assertThat(capturedBody.vendors_enabled_source).isUndefined();
+    assertThat(capturedBody.vendors_enabled_diagnostic).isEqualTo('CONFIGURED_KEY_NOT_FOUND');
+    assertThat(capturedBody.vendors_enabled_configured_key).isEqualTo('my_custom_key');
+- name: Malformed configured key is refused without falling back to defaults
+  code: |-
+    eventDataOverrides.broken_key = 'yes;no';
+    eventDataOverrides.didomi_vendors_enabled = 'google,';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+      vendors_enabled_key: 'broken_key',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isUndefined();
+    assertThat(capturedBody.vendors_enabled_source).isUndefined();
+    assertThat(capturedBody.vendors_enabled_diagnostic).isEqualTo('MALFORMED_LIST');
+    assertThat(capturedBody.vendors_enabled_configured_key).isEqualTo('broken_key');
 setup: |-
   const JSON = require('JSON');
 
@@ -693,6 +819,6 @@ setup: |-
 
 ___NOTES___
 
-Version 2.1.0
+Version 2.2.0
 Created on 12/14/2021, 5:58:24 PM
 
