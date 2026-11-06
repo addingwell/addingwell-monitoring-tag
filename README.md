@@ -25,6 +25,8 @@ This allows you to control :
 
 ![Data Monitoring interface - first page](./assets/data_monitoring.png)
 
+In Internal Transformer mode, the tag also forwards consent-related cookies and, when present, a raw vendors-enabled list from event data (`vendors_enabled` / `vendors_enabled_source`) for Event Consent Monitoring.
+
 ## Implementation
 
 You can follow our [step-by-step instructions](https://docs.addingwell.com/configure-tag-health-gtm-server-side).

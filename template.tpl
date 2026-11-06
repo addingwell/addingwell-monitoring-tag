@@ -132,6 +132,20 @@ ___TEMPLATE_PARAMETERS___
         "type": "EQUALS"
       }
     ]
+  },
+  {
+    "type": "TEXT",
+    "name": "vendors_enabled_key",
+    "displayName": "Vendors enabled event data key",
+    "simpleValueType": true,
+    "help": "Optional. Custom event data key for the vendors-enabled list (raw string). Checked before the defaults: didomi_vendors_enabled, didomiVendorsEnabled, consent_vendors, consent_status.",
+    "enablingConditions": [
+      {
+        "paramName": "configuration",
+        "paramValue": "internal_transformer",
+        "type": "EQUALS"
+      }
+    ]
   }
 ]
 
@@ -161,6 +175,37 @@ const allEventData = getAllEventData();
 const eventDataParsed = [];
 
 const ignoredParameters = ['client_hints', 'x-sst-system_properties'];
+
+// Default event-data keys for the vendors-enabled list (checked in order).
+// More keys may be added later after a data study — keep this list easy to edit.
+const DEFAULT_VENDORS_ENABLED_KEYS = [
+  'didomi_vendors_enabled',
+  'didomiVendorsEnabled',
+  'consent_vendors',
+  'consent_status',
+];
+
+function resolveVendorsEnabled(customKey) {
+  const keys = [];
+  if (customKey) {
+    keys.push(customKey);
+  }
+  for (const key of DEFAULT_VENDORS_ENABLED_KEYS) {
+    keys.push(key);
+  }
+
+  for (const key of keys) {
+    const value = getEventData(key);
+    if (getType(value) === 'string' && value) {
+      return {
+        vendors_enabled: value,
+        vendors_enabled_source: key,
+      };
+    }
+  }
+
+  return null;
+}
 
 function getSpecialValue(type, value) {
   let isSpecialValue = null;
@@ -307,7 +352,13 @@ addEventCallback((containerId, eventData) => {
 
     // include cookies in internal transformer call
     row.cookies = cookies;
-    
+
+    const vendorsEnabled = resolveVendorsEnabled(data.vendors_enabled_key);
+    if (vendorsEnabled) {
+      row.vendors_enabled = vendorsEnabled.vendors_enabled;
+      row.vendors_enabled_source = vendorsEnabled.vendors_enabled_source;
+    }
+
     sendHttpRequest(
       internalTransformerUrl,
       {
@@ -552,11 +603,96 @@ ___SERVER_PERMISSIONS___
 
 ___TESTS___
 
-scenarios: []
+scenarios:
+- name: Forwards vendors_enabled from a default event data key
+  code: |-
+    eventDataOverrides.didomi_vendors_enabled = 'google,metaads,c:xyz,';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isEqualTo('google,metaads,c:xyz,');
+    assertThat(capturedBody.vendors_enabled_source).isEqualTo('didomi_vendors_enabled');
+    assertThat(capturedBody.event_data).isDefined();
+- name: Custom vendors_enabled_key takes precedence over defaults
+  code: |-
+    eventDataOverrides.custom_vendors = 'google,';
+    eventDataOverrides.didomi_vendors_enabled = 'metaads,';
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+      vendors_enabled_key: 'custom_vendors',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isEqualTo('google,');
+    assertThat(capturedBody.vendors_enabled_source).isEqualTo('custom_vendors');
+- name: Omits vendors_enabled fields when nothing is found
+  code: |-
+    mockCommonApis();
+
+    runCode({
+      configuration: 'internal_transformer',
+    });
+
+    assertThat(capturedBody.vendors_enabled).isUndefined();
+    assertThat(capturedBody.vendors_enabled_source).isUndefined();
+    assertThat(capturedBody.cookies).isDefined();
+setup: |-
+  const JSON = require('JSON');
+
+  const mockEvent = {
+    event_name: 'purchase',
+    client_id: 'cid',
+    user_agent: 'Mozilla/5.0',
+    page_hostname: 'example.com',
+  };
+
+  let capturedBody;
+  let eventDataOverrides;
+
+  eventDataOverrides = {};
+
+  const mockCommonApis = () => {
+    capturedBody = undefined;
+
+    mock('getAllEventData', () => mockEvent);
+    mock('getEventData', (key) => {
+      if (eventDataOverrides[key] !== undefined) {
+        return eventDataOverrides[key];
+      }
+      return mockEvent[key];
+    });
+    mock('addEventCallback', (cb) => {
+      cb('GTM-TEST', { tags: [] });
+    });
+    mock('getContainerVersion', () => ({ version: '1' }));
+    mock('getRequestQueryParameter', () => undefined);
+    mock('getClientName', () => 'GA4');
+    mock('getRequestHeader', (name) => {
+      if (name === 'x-addingwell-internal-endpoint') {
+        return 'https://transformer.example/transformer/event-monitoring';
+      }
+      if (name === 'x-addingwell-cookie-names') {
+        return 'didomi_token';
+      }
+      return undefined;
+    });
+    mock('getCookieValues', () => []);
+    mock('sendHttpRequest', (url, options, body) => {
+      capturedBody = JSON.parse(body);
+    });
+    mock('sha256Sync', () => 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    mock('getTimestampMillis', () => 1000);
+    mock('parseUrl', () => ({ hostname: 'example.com' }));
+    mock('logToConsole', () => {});
+  };
 
 
 ___NOTES___
 
-Version 2.0.0
+Version 2.1.0
 Created on 12/14/2021, 5:58:24 PM
 
